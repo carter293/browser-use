@@ -1,9 +1,13 @@
+import json
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from bubus import BaseEvent
 from cdp_use.cdp.target import TargetID
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_serializer
+from uuid_extensions import uuid7str
 
 from browser_use.dom.views import DOMInteractedElement, SerializedDOMState
 
@@ -198,3 +202,95 @@ class BrowserError(Exception):
 
 class URLNotAllowedError(BrowserError):
 	"""Error raised when a URL is not allowed"""
+
+
+# ============================================================================
+# Session Recording Models
+# ============================================================================
+
+
+class RecordedStep(BaseModel):
+	"""One recorded agent action with the browser state the agent saw before acting.
+
+	Captures exactly what the agent would see at each step: the DOM text representation
+	(same format as the LLM receives), a screenshot, and stable element identifiers
+	so the recording can be fed back as context during replay.
+	"""
+
+	model_config = ConfigDict(extra='forbid')
+
+	step_number: int
+	timestamp: float
+
+	# Agent-native state: what the agent saw before this action was taken
+	url: str
+	title: str
+	dom_text: str  # output of dom_state.llm_representation() — same text the agent reads
+	screenshot_b64: str | None = None  # base64 PNG, same image the agent sees
+
+	# Action that was taken
+	action_type: str  # e.g. 'click_element', 'input_text', 'navigate'
+	action_params: dict[str, Any] = Field(default_factory=dict)
+
+	# Stable element identifiers for element-based actions (for future hybrid replay)
+	element_tag: str | None = None
+	element_ax_name: str | None = None  # accessible name (aria-label, button text, etc.)
+	element_xpath: str | None = None
+	element_stable_hash: str | None = None
+
+	# Optional voice overlay transcript aligned to this step
+	voice_transcript: str | None = None
+
+
+class SessionRecord(BaseModel):
+	"""Complete recording of a browser automation session.
+
+	Stores per-step agent-native state (DOM text + screenshot) alongside the
+	action taken, so the recording can be replayed by feeding it as structured
+	context to an agent.
+	"""
+
+	model_config = ConfigDict(extra='forbid')
+
+	session_id: str = Field(default_factory=uuid7str)
+	created_at: float = Field(default_factory=time.time)
+	task_description: str | None = None
+	steps: list[RecordedStep] = Field(default_factory=list)
+
+	def save(self, path: Path | str) -> None:
+		"""Serialize the recording to a JSON file."""
+		dest = Path(path)
+		dest.parent.mkdir(parents=True, exist_ok=True)
+		dest.write_text(self.model_dump_json(indent=2), encoding='utf-8')
+
+	@classmethod
+	def load(cls, path: Path | str) -> 'SessionRecord':
+		"""Load a recording from a JSON file."""
+		return cls.model_validate_json(Path(path).read_text(encoding='utf-8'))
+
+	def to_agent_context(self) -> str:
+		"""Serialize the recording as a compact, human-readable string for agent replay.
+
+		The output is suitable for injection into an agent's extend_system_message
+		or as a per-step hint, giving the agent structured context about what was
+		done in the original recording at each equivalent step.
+		"""
+		lines: list[str] = []
+		if self.task_description:
+			lines.append(f'Recorded task: {self.task_description}')
+			lines.append('')
+		lines.append(f'Recording has {len(self.steps)} steps:')
+		lines.append('')
+		for step in self.steps:
+			line = f'Step {step.step_number}: [{step.action_type}]'
+			if step.url:
+				line += f' on {step.url}'
+			lines.append(line)
+			if step.element_ax_name:
+				lines.append(f'  element: {step.element_ax_name} <{step.element_tag}>')
+			if step.action_params:
+				params_str = json.dumps(step.action_params, ensure_ascii=False)
+				lines.append(f'  params: {params_str}')
+			if step.voice_transcript:
+				lines.append(f'  voice note: {step.voice_transcript}')
+		return '\n'.join(lines)
