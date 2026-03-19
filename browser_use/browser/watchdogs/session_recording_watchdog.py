@@ -114,7 +114,7 @@ class SessionRecordingWatchdog(BaseWatchdog):
 
 		return url, title, dom_text, screenshot
 
-	def _node_info(self, node: EnhancedDOMTreeNode | None) -> dict[str, str | None]:
+	def _node_info(self, node: EnhancedDOMTreeNode | None) -> dict[str, str | int | None]:
 		"""Extract stable element identifiers from an EnhancedDOMTreeNode."""
 		if node is None:
 			return {'element_tag': None, 'element_ax_name': None, 'element_xpath': None, 'element_stable_hash': None}
@@ -122,7 +122,7 @@ class SessionRecordingWatchdog(BaseWatchdog):
 			'element_tag': node.node_name,
 			'element_ax_name': node.ax_node.name if node.ax_node else None,
 			'element_xpath': node.xpath,
-			'element_stable_hash': node.stable_hash,
+			'element_stable_hash': node.compute_stable_hash(),
 		}
 
 	def _append_step(

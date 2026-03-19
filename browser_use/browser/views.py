@@ -236,7 +236,7 @@ class RecordedStep(BaseModel):
 	element_tag: str | None = None
 	element_ax_name: str | None = None  # accessible name (aria-label, button text, etc.)
 	element_xpath: str | None = None
-	element_stable_hash: str | None = None
+	element_stable_hash: int | None = None
 
 	# Optional voice overlay transcript aligned to this step
 	voice_transcript: str | None = None

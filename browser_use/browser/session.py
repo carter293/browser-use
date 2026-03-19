@@ -527,6 +527,7 @@ class BrowserSession(BaseModel):
 	_screenshot_watchdog: Any | None = PrivateAttr(default=None)
 	_permissions_watchdog: Any | None = PrivateAttr(default=None)
 	_recording_watchdog: Any | None = PrivateAttr(default=None)
+	_session_recording_watchdog: Any | None = PrivateAttr(default=None)
 	_captcha_watchdog: Any | None = PrivateAttr(default=None)
 	_watchdogs_attached: bool = PrivateAttr(default=False)
 
@@ -628,6 +629,7 @@ class BrowserSession(BaseModel):
 		self._screenshot_watchdog = None
 		self._permissions_watchdog = None
 		self._recording_watchdog = None
+		self._session_recording_watchdog = None
 		self._captcha_watchdog = None
 		self._watchdogs_attached = False
 		if self._demo_mode:
@@ -1663,6 +1665,19 @@ class BrowserSession(BaseModel):
 		RecordingWatchdog.model_rebuild()
 		self._recording_watchdog = RecordingWatchdog(event_bus=self.event_bus, browser_session=self)
 		self._recording_watchdog.attach_to_session()
+
+		# Initialize SessionRecordingWatchdog if session_record_path is configured
+		if self.browser_profile.session_record_path:
+			from browser_use.browser.watchdogs.session_recording_watchdog import SessionRecordingWatchdog
+
+			SessionRecordingWatchdog.model_rebuild()
+			self._session_recording_watchdog = SessionRecordingWatchdog(
+				event_bus=self.event_bus,
+				browser_session=self,
+				output_path=self.browser_profile.session_record_path,
+			)
+			self._session_recording_watchdog.attach_to_session()
+			self.logger.debug(f'🎬 SessionRecordingWatchdog enabled → {self.browser_profile.session_record_path}')
 
 		# Initialize HarRecordingWatchdog if record_har_path is configured (handles HTTPS HAR capture)
 		if self.browser_profile.record_har_path:

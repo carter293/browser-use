@@ -682,6 +682,10 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		default=None, description='Video frame size. If not set, it will use the viewport size.'
 	)
 	record_video_framerate: int = Field(default=30, description='The framerate to use for the video recording.')
+	session_record_path: Path | None = Field(
+		default=None,
+		description='File path to save a JSON session recording (agent-native DOM + actions). If set, a SessionRecordingWatchdog is attached and the recording is auto-saved on session stop.',
+	)
 
 	# TODO: finish implementing extension support in extensions.py
 	# extension_ids_to_preinstall: list[str] = Field(
